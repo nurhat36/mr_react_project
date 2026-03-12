@@ -658,3 +658,178 @@ button:disabled {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.3; }
 }
+/* =========================================
+   4. HASTA LİSTESİ BİLEŞENİ
+========================================= */
+.main-grid {
+    display: flex;
+    gap: 1.5rem;
+    height: 100%;
+}
+
+.patients-column { width: 320px; flex-shrink: 0; }
+.viewer-column { flex: 1; }
+
+.patient-panel {
+    background: #1e293b;
+    border-radius: 12px;
+    border: 1px solid #334155;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.2rem;
+    background: #0f172a;
+    border-bottom: 1px solid #334155;
+}
+
+.panel-header h3 { font-size: 1rem; color: #f8fafc; }
+
+.icon-btn {
+    background: transparent;
+    color: #3b82f6;
+    padding: 6px;
+    border: 1px solid #3b82f6;
+    border-radius: 6px;
+}
+.icon-btn:hover { background: rgba(59, 130, 246, 0.1); }
+
+.add-patient-form { padding: 1rem; display: flex; gap: 8px; border-bottom: 1px solid #334155; }
+.add-patient-form input { flex: 1; padding: 8px 12px; }
+.add-patient-form button { padding: 8px 16px; }
+
+.patient-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0.5rem;
+}
+
+.patient-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    margin-bottom: 8px;
+    background: #0f172a;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: 0.2s;
+}
+.patient-card:hover { border-color: #3b82f6; background: rgba(30, 41, 59, 0.8); }
+
+.p-info { display: flex; align-items: center; gap: 12px; }
+.p-avatar { background: #334155; padding: 8px; border-radius: 50%; color: #94a3b8; }
+.p-name { font-weight: bold; font-size: 0.95rem; color: white; }
+.p-id { font-size: 0.75rem; color: #64748b; }
+
+.p-actions { display: flex; align-items: center; gap: 4px; }
+.delete-btn { background: transparent; padding: 4px; color: #64748b; border: none;}
+.delete-btn:hover { color: #f87171; background: transparent;}
+.chevron { color: #475569; }
+.p-text { padding: 1rem; text-align: center; color: #64748b; font-size: 0.9rem; }
+/* Dosya Çipleri (File Chips) */
+.file-chip {
+    background: #1e293b;
+    border: 1px solid #3b82f6;
+    color: #93c5fd;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+.file-chip:hover {
+    background: #3b82f6;
+    color: white;
+}
+
+/* Yükleme Animasyonu */
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+.animate-spin { animation: spin 1s linear infinite; }
+/* =========================================
+   GÖRÜNTÜLEYİCİ ALT KONTROL PANELİ
+========================================= */
+.viewer-controls {
+    display: flex;
+    align-items: center;
+    padding: 12px 1.5rem;
+    background: #0f172a;
+    border-top: 1px solid #334155;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.control-label {
+    font-size: 0.8rem;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.btn-group {
+    display: flex;
+    background: #1e293b;
+    border-radius: 8px;
+    border: 1px solid #334155;
+    overflow: hidden;
+}
+
+.view-btn {
+    background: transparent;
+    border: none;
+    border-right: 1px solid #334155;
+    padding: 8px 12px;
+    color: #cbd5e1;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: 0.2s;
+    border-radius: 0;
+}
+.view-btn:last-child { 
+    border-right: none; 
+}
+.view-btn:hover { 
+    background: rgba(59, 130, 246, 0.1); 
+    color: white; 
+}
+.view-btn.active { 
+    background: #2563eb; 
+    color: white; 
+    font-weight: bold; 
+}
+
+.scroll-hint {
+    margin-left: auto;
+    font-size: 0.8rem;
+    color: #10b981;
+    font-style: italic;
+}
+/* Görüntü İşleniyor Yükleme Ekranı */
+.loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(15, 23, 42, 0.85); /* Hafif saydam siyah arka plan */
+    backdrop-filter: blur(4px); /* Arkadaki siyahlığı buzlu cam gibi yapar */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 10; /* Canvas'ın üstünde durmasını sağlar */
+    border-radius: 12px;
+}

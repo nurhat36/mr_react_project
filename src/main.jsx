@@ -1,10 +1,9 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import './index.css'
+import React from 'react'
+import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
+import './index.css' // veya './App.css' sende hangisi varsa
 
-createRoot(document.getElementById('root')).render(
-  <StrictMode>
+ReactDOM.createRoot(document.getElementById('root')).render(
+    // DİKKAT: <React.StrictMode> BURADAN SİLİNMİŞ OLMALI!
     <App />
-  </StrictMode>,
 )
