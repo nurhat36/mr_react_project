@@ -1,26 +1,50 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import NiiVueViewer from '../components/NiiVueViewer';
 import PatientList from '../components/PatientList';
-import { getPatientFiles, uploadPatientFile } from '../services/fileService';
-import { Upload, Activity, Database, LogOut, User as UserIcon, File, Loader2 } from 'lucide-react';
+import { getPatientFiles, uploadPatientFile, startSegmentation } from '../services/fileService';
+import { 
+    Upload, 
+    Activity, 
+    Database, 
+    LogOut, 
+    User as UserIcon, 
+    File, 
+    Loader2, 
+    BrainCircuit,
+    Move,     // El simgesi
+    Square    // Seçim simgesi
+} from 'lucide-react';
 
 const MainDashboard = ({ user, onLogout }) => {
     const [selectedPatient, setSelectedPatient] = useState(null);
     const [patientFiles, setPatientFiles] = useState([]);
     const [uploading, setUploading] = useState(false);
-    const [viewMode, setViewMode] = useState('multiplanar'); // Görünüm Modu State'i
+    const [viewMode, setViewMode] = useState('multiplanar'); 
     
-    const [isImageLoading, setIsImageLoading] = useState(false); // YENİ: Görüntü yüklenme durumu
+    const [activeFileId, setActiveFileId] = useState(null); 
+    const [isSegmenting, setIsSegmenting] = useState(false);
     
-    // NiiVue için gösterilecek dosyalar
     const [mainImage, setMainImage] = useState(null);
     const [maskImage, setMaskImage] = useState(null);
+    
+    // YENİ: Etkileşim modu (Gezinme: 'pan', Bölge Seçimi: 'select')
+    const [interactionMode, setInteractionMode] = useState('pan');
+    const [roiCoords, setRoiCoords] = useState(null);
 
-    // Hasta seçildiğinde dosyalarını çek
+    // NiiVue'den gelen seçim koordinatlarını dinle
+    useEffect(() => {
+        window.onROISelected = (coords) => {
+            console.log("Seçilen ROI Koordinatları:", coords);
+            setRoiCoords(coords);
+        };
+    }, []);
+
     const handlePatientSelect = async (patient) => {
         setSelectedPatient(patient);
-        setMainImage(null); // Görüntüleyiciyi sıfırla
+        setMainImage(null); 
         setMaskImage(null);
+        setActiveFileId(null);
+        setRoiCoords(null);
         fetchFiles(patient.id);
     };
 
@@ -39,34 +63,44 @@ const MainDashboard = ({ user, onLogout }) => {
 
         try {
             setUploading(true);
-            await uploadPatientFile(selectedPatient.id, file);
+            const result = await uploadPatientFile(selectedPatient.id, file);
             await fetchFiles(selectedPatient.id);
-            
-            // Sadece URL değil, dosya adını da gönderiyoruz ki NiiVue uzantıyı anlasın
+            setActiveFileId(result.id);
             setMainImage({ 
                 url: URL.createObjectURL(file), 
                 name: file.name 
             }); 
-            
         } catch (error) {
             console.error("Yükleme hatası:", error);
-            alert("Dosya yüklenirken bir hata oluştu.");
         } finally {
             setUploading(false);
         }
     };
-    const handleFileClick = (fileRecord) => {
-        // Windows yollarındaki ters slaşları (\) düz slaşa (/) çeviriyoruz
-        const cleanPath = fileRecord.file_path.replace(/\\/g, '/');
-        
-        // FastAPI sunucumuzun adresiyle birleştirip tam URL oluşturuyoruz
-        const fullUrl = `http://localhost:8000/${cleanPath}`;
 
-        // NiiVue'ye yeni resmi gönderiyoruz
-        setMainImage({
-            url: fullUrl,
-            name: fileRecord.filename
-        });
+    const handleFileClick = (fileRecord) => {
+        setActiveFileId(fileRecord.id); 
+        setMaskImage(null); 
+        setRoiCoords(null);
+        const cleanPath = fileRecord.file_path.replace(/\\/g, '/');
+        const fullUrl = `http://localhost:8000/${cleanPath}`;
+        setMainImage({ url: fullUrl, name: fileRecord.filename });
+    };
+
+    const handleSegmentClick = async () => {
+        if (!activeFileId) {
+            alert("Lütfen önce analiz edilecek bir dosya seçin.");
+            return;
+        }
+        try {
+            setIsSegmenting(true);
+            const result = await startSegmentation(activeFileId, roiCoords);
+            setMaskImage(`http://localhost:8000${result.mask_url}`);
+        } catch (error) {
+            console.error("Segmentasyon hatası:", error);
+            alert("Analiz sırasında bir hata oluştu.");
+        } finally {
+            setIsSegmenting(false);
+        }
     };
 
     return (
@@ -76,14 +110,12 @@ const MainDashboard = ({ user, onLogout }) => {
                     <Activity color="#60a5fa" size={32} />
                     <h2>SEGMENT AI</h2>
                 </div>
-                
                 <nav className="nav-menu">
                     <div className="nav-group-label">KONTROL PANELİ</div>
                     <div className="nav-item active"><Database size={20} /> Hasta Kayıtları</div>
                     <div className="nav-item"><Activity size={20} /> Canlı Analiz</div>
                     <div className="nav-item"><UserIcon size={20} /> Uzman Doktor</div>
                 </nav>
-
                 <div className="sidebar-footer">
                     <button className="logout-btn" onClick={onLogout}>
                         <LogOut size={18} /> Sistemi Kapat
@@ -97,25 +129,22 @@ const MainDashboard = ({ user, onLogout }) => {
                         <input type="text" placeholder="Hasta ID veya İsim ara..." />
                     </div>
                     <div className="user-profile">
-                        <span>Dr. {user.username}</span>
-                        <div className="avatar">{user.username[0].toUpperCase()}</div>
+                        <span>Dr. {user?.username || 'Kullanıcı'}</span>
+                        <div className="avatar">{user?.username ? user.username[0].toUpperCase() : 'U'}</div>
                     </div>
                 </header>
 
                 <section className="dashboard-body">
                     <div className="welcome-banner">
                         <h1>TÜBİTAK 3D MRI Segmentasyon Sistemi</h1>
-                        <p>Yapay zeka destekli tümör tespiti ve hacimsel analiz paneli.</p>
+                        <p>Analiz etmek istediğiniz bölgeyi Seçim Modu'nu açarak sağ tıkla işaretleyin.</p>
                     </div>
 
                     <div className="main-grid">
-                        
-                        {/* SOL: Hasta Listesi */}
                         <div className="patients-column">
                             <PatientList onSelectPatient={handlePatientSelect} />
                         </div>
 
-                        {/* SAĞ: Görüntüleyici ve Dosya Yönetimi */}
                         <div className="viewer-column">
                             {selectedPatient ? (
                                 <div className="viewer-card">
@@ -126,8 +155,6 @@ const MainDashboard = ({ user, onLogout }) => {
                                             </h3>
                                             <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>ID: {selectedPatient.id}</span>
                                         </div>
-                                        
-                                        {/* Yükleme Butonu */}
                                         <label className="upload-label" style={{ opacity: uploading ? 0.7 : 1 }}>
                                             {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />} 
                                             {uploading ? 'Yükleniyor...' : 'Yeni MR Yükle'}
@@ -135,57 +162,101 @@ const MainDashboard = ({ user, onLogout }) => {
                                         </label>
                                     </div>
 
-                                    {/* Hastanın Geçmiş Dosyaları Listesi */}
                                     {patientFiles.length > 0 && (
-                                        <div className="patient-files-bar" style={{ padding: '10px 1.5rem', background: '#0f172a', borderBottom: '1px solid #334155', display: 'flex', gap: '10px', overflowX: 'auto' }}>
+                                        <div className="patient-files-bar">
                                             {patientFiles.map(f => (
-                                                <button key={f.id} className="file-chip" onClick={() => handleFileClick(f)}>
+                                                <button 
+                                                    key={f.id} 
+                                                    className={`file-chip ${activeFileId === f.id ? 'active' : ''}`} 
+                                                    onClick={() => handleFileClick(f)}
+                                                >
                                                     <File size={14} /> {f.filename.substring(0, 15)}...
                                                 </button>
                                             ))}
                                         </div>
                                     )}
 
-                                    {/* GÖRÜNTÜLEYİCİ ALANI */}
-                                    <div className="canvas-wrapper" style={{ position: 'relative' }}>
-                                        
-                                        {/* YÜKLEME EKRANI (OVERLAY) */}
-                                        {isImageLoading && (
-                                            <div className="loading-overlay">
-                                                <Loader2 size={48} className="animate-spin" color="#3b82f6" />
-                                                <h3 style={{ marginTop: '15px', color: 'white' }}>MR Görüntüsü İşleniyor...</h3>
-                                                <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>Büyük dosyalar için bu işlem birkaç saniye sürebilir.</p>
-                                            </div>
-                                        )}
-
+                                    <div className="canvas-wrapper" style={{ position: 'relative', height: '500px' }}>
                                         {mainImage ? (
                                             <NiiVueViewer 
                                                 mainImage={mainImage} 
                                                 maskImage={maskImage} 
                                                 viewMode={viewMode}
-                                                onLoadingChange={setIsImageLoading} // NiiVue ile haberleşme
+                                                interactionMode={interactionMode} // YENİ: Modu NiiVue'ye pasla
                                             />
                                         ) : (
                                             <div className="empty-state">
                                                 <Database size={48} />
-                                                <p>Görüntülemek için yukarıdan yeni MR yükleyin</p>
+                                                <p>Görüntülemek için yukarıdan yeni MR yükleyin veya seçin</p>
                                             </div>
                                         )}
                                     </div>
 
+                                    {mainImage && (
+                                        <div className="viewer-controls" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#1e293b', padding: '10px 1.5rem' }}>
+                                            
+                                            <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                                                {/* YENİ: ETKİLEŞİM MODU BUTONLARI (PAN / SELECT) */}
+                                                <div className="btn-group" style={{ borderRight: '1px solid #334155', paddingRight: '15px' }}>
+                                                    <button 
+                                                        className={`view-btn ${interactionMode === 'pan' ? 'active' : ''}`} 
+                                                        onClick={() => setInteractionMode('pan')}
+                                                        title="Yakınlaştır ve Gezin"
+                                                    >
+                                                        <Move size={14} /> El
+                                                    </button>
+                                                    <button 
+                                                        className={`view-btn ${interactionMode === 'select' ? 'active' : ''}`} 
+                                                        onClick={() => setInteractionMode('select')}
+                                                        title="Sağ Tıkla Bölge Seç"
+                                                    >
+                                                        <Square size={14} /> Seçim
+                                                    </button>
+                                                </div>
+
+                                                <span className="control-label" style={{ color: '#94a3b8', fontSize: '0.75rem' }}>MOD:</span>
+                                                <div className="btn-group">
+                                                    <button className={`view-btn ${viewMode === 'multiplanar' ? 'active' : ''}`} onClick={() => setViewMode('multiplanar')}>Çoklu-Plan</button>
+                                                    <button className={`view-btn ${viewMode === '3d' ? 'active' : ''}`} onClick={() => setViewMode('3d')}>3D Model</button>
+                                                </div>
+                                                
+                                                <div className="btn-group">
+                                                    <button className={`view-btn ${viewMode === 'axial' ? 'active' : ''}`} onClick={() => setViewMode('axial')}>Axial</button>
+                                                    <button className={`view-btn ${viewMode === 'coronal' ? 'active' : ''}`} onClick={() => setViewMode('coronal')}>Coronal</button>
+                                                    <button className={`view-btn ${viewMode === 'sagittal' ? 'active' : ''}`} onClick={() => setViewMode('sagittal')}>Sagittal</button>
+                                                </div>
+                                            </div>
+
+                                            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                                                {roiCoords && <span style={{ color: '#10b981', fontSize: '0.7rem', fontWeight: 'bold' }}>✔ BÖLGE SEÇİLDİ</span>}
+                                                <button 
+                                                    onClick={handleSegmentClick} 
+                                                    disabled={isSegmenting}
+                                                    className="segment-btn"
+                                                    style={{
+                                                        background: isSegmenting ? '#475569' : 'linear-gradient(90deg, #10b981, #059669)',
+                                                        color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px',
+                                                        display: 'flex', alignItems: 'center', gap: '8px', cursor: isSegmenting ? 'not-allowed' : 'pointer',
+                                                        fontWeight: 'bold', boxShadow: '0 4px 6px rgba(0,0,0,0.2)', transition: '0.3s'
+                                                    }}
+                                                >
+                                                    {isSegmenting ? <Loader2 size={18} className="animate-spin" /> : <BrainCircuit size={18} />}
+                                                    {isSegmenting ? 'AI İşleniyor...' : 'AI Analizini Başlat'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             ) : (
-                                // Hasta Seçilmediyse Gösterilecek Ekran
                                 <div className="viewer-card" style={{ justifyContent: 'center', alignItems: 'center', minHeight: '500px' }}>
                                     <div className="empty-state">
                                         <UserIcon size={64} color="#334155" />
                                         <h3 style={{ color: '#94a3b8', marginTop: '1rem' }}>Lütfen Bir Hasta Seçin</h3>
-                                        <p style={{ color: '#64748b' }}>MR görüntülerini yüklemek veya incelemek için sol taraftaki listeden bir hasta kaydına tıklayın.</p>
+                                        <p style={{ color: '#64748b' }}>MR incelemek için sol listeden bir hasta seçin.</p>
                                     </div>
                                 </div>
                             )}
                         </div>
-
                     </div>
                 </section>
             </main>

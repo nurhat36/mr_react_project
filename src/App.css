@@ -788,6 +788,9 @@ button:disabled {
 }
 
 .view-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
     background: transparent;
     border: none;
     border-right: 1px solid #334155;
@@ -806,7 +809,7 @@ button:disabled {
     color: white; 
 }
 .view-btn.active { 
-    background: #2563eb; 
+    background: #3b82f6 !important;
     color: white; 
     font-weight: bold; 
 }
