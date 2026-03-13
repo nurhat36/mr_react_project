@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:8000';
+const API_URL = 'http://oncovisionai.com.tr/api';
 
 const getAuthHeaders = (isMultipart = false) => {
     const userStr = localStorage.getItem('user');

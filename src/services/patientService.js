@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Docker'da çalışırken de bu adres kullanılacak (Nginx ayarlarında 8000'e proxy yapılabilir ama şimdilik localhost:8000 ideal)
-const API_URL = 'http://localhost:8000/patients';
+const API_URL = 'http://oncovisionai.com.tr/api/patients';
 
 // Her istekte kullanıcının token'ını header'a ekleyen yardımcı fonksiyon
 const getAuthHeaders = () => {

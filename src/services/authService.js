@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { jwtDecode } from 'jwt-decode';
 
-const API_URL = 'http://localhost:8000/auth';
+const API_URL = 'http://oncovisionai.com.tr/api/auth';
 
 // LOGIN FONKSİYONU
 export const login = async (username, password) => {
