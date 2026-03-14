@@ -1,6 +1,8 @@
 // src/pages/LandingPage.jsx
 import React from 'react';
 import '../styles/LandingPage.css';
+// Temiz dosya adıyla import et (Yolun kendi klasör yapına uygun olduğundan emin ol)
+import logo from '../assets/logo.svg';
 import { 
   Brain, Activity, Monitor, UploadCloud, 
   Cpu, Layers, ShieldCheck, ArrowRight, CheckCircle2 
@@ -11,9 +13,11 @@ function LandingPage({ onLoginClick, onRegisterClick }) {
     <div className="landing-container">
       {/* 1. Üst Menü (Navbar) */}
       <header className="navbar">
-        <div className="logo">
-          <div className="logo-icon-bg"><Brain size={24} color="#ffffff" /></div>
-          <span>OncoVisionAI</span>
+       <div className="logo">
+        <div className="logo-icon-bg">
+            <img src={logo} alt="OncoVisionAI Logo" width="32" height="32" />
+        </div>
+        <span>OncoVisionAI</span>
         </div>
         <div className="nav-buttons">
           <button onClick={onLoginClick} className="btn-login">Giriş Yap</button>
