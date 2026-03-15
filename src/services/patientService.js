@@ -4,7 +4,7 @@ import axios from 'axios';
 // NOT: Canlı sunucu adresi https olarak güncellendi!
 const BASE_URL = window.location.hostname === 'localhost' 
     ? 'http://localhost:8000/api' 
-    : 'https://oncovisionai.com.tr/api';
+    : 'http://oncovisionai.com.tr/api';
 
 const API_URL = `${BASE_URL}/patients`;
 

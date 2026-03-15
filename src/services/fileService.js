@@ -4,7 +4,7 @@ import axios from 'axios';
 // NOT: Canlı sunucu adresi https olarak güncellendi!
 const API_URL = window.location.hostname === 'localhost' 
     ? 'http://localhost:8000/api' 
-    : 'https://oncovisionai.com.tr/api';
+    : 'http://oncovisionai.com.tr/api';
 
 // Her istekte kullanıcının token'ını header'a ekleyen yardımcı fonksiyon
 const getAuthHeaders = (isMultipart = false) => {
