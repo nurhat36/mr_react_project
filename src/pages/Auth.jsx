@@ -35,28 +35,19 @@ const Auth = ({ onLoginSuccess, initialMode }) => {
     // ==========================================
     // 2. GOOGLE LOGIN AKIŞI (DÜZELTİLDİ)
     // ==========================================
-    const loginWithGoogle = useGoogleLogin({
+   const loginWithGoogle = useGoogleLogin({
         onSuccess: async (tokenResponse) => {
             console.log("✅ 1. [GOOGLE BAŞARILI]:", tokenResponse);
             
             try {
                 setMessage("Doğrulanıyor...");
-                // Backend'e access_token'ı gönder
-                const responseData = await googleLogin(tokenResponse.access_token);
                 
-                // KRİTİK: Backend'den 'access_token' gelirse onu 'token' olarak formatla
-                const userData = {
-                    token: responseData.access_token, // Backend'in 'access_token'ını 'token' yapıyoruz
-                    username: responseData.username,
-                    userId: responseData.user_id
-                };
-
+                // authService.js zaten formatlayıp localStorage'a kaydediyor ve bize hazır objeyi dönüyor!
+                const userData = await googleLogin(tokenResponse.access_token);
+                
                 console.log("🎉 2. [YETKİLENDİRME BAŞARILI]:", userData);
                 
-                // TARAYICIYA KAYDET
-                localStorage.setItem('user', JSON.stringify(userData));
-
-                // APP.JS STATE'İNİ GÜNCELLE (Authorize olmanı sağlayan yer!)
+                // APP.JS STATE'İNİ GÜNCELLE (Dashboard'un açılması için)
                 if (onLoginSuccess) {
                     onLoginSuccess(userData);
                 }
