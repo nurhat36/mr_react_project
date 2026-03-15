@@ -18,7 +18,7 @@ import {
 // YENİ: CANLI VE LOCAL AYRIMI İÇİN BASE_URL
 const BASE_URL = window.location.hostname === 'localhost' 
     ? 'http://localhost:8000' 
-    : 'https://oncovisionai.com.tr';
+    : 'http://oncovisionai.com.tr';
 
 const MainDashboard = ({ user, onLogout }) => {
     const [selectedPatient, setSelectedPatient] = useState(null);
