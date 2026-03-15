@@ -15,6 +15,11 @@ import {
     Square    // Seçim simgesi
 } from 'lucide-react';
 
+// YENİ: CANLI VE LOCAL AYRIMI İÇİN BASE_URL
+const BASE_URL = window.location.hostname === 'localhost' 
+    ? 'http://localhost:8000' 
+    : 'https://oncovisionai.com.tr';
+
 const MainDashboard = ({ user, onLogout }) => {
     const [selectedPatient, setSelectedPatient] = useState(null);
     const [patientFiles, setPatientFiles] = useState([]);
@@ -27,11 +32,9 @@ const MainDashboard = ({ user, onLogout }) => {
     const [mainImage, setMainImage] = useState(null);
     const [maskImage, setMaskImage] = useState(null);
     
-    // YENİ: Etkileşim modu (Gezinme: 'pan', Bölge Seçimi: 'select')
     const [interactionMode, setInteractionMode] = useState('pan');
     const [roiCoords, setRoiCoords] = useState(null);
 
-    // NiiVue'den gelen seçim koordinatlarını dinle
     useEffect(() => {
         window.onROISelected = (coords) => {
             console.log("Seçilen ROI Koordinatları:", coords);
@@ -81,8 +84,11 @@ const MainDashboard = ({ user, onLogout }) => {
         setActiveFileId(fileRecord.id); 
         setMaskImage(null); 
         setRoiCoords(null);
+        
+        // DÜZELTİLDİ: Localhost yerine BASE_URL kullanıyoruz
         const cleanPath = fileRecord.file_path.replace(/\\/g, '/');
-        const fullUrl = `http://localhost:8000/${cleanPath}`;
+        const fullUrl = `${BASE_URL}/${cleanPath}`;
+        
         setMainImage({ url: fullUrl, name: fileRecord.filename });
     };
 
@@ -94,7 +100,10 @@ const MainDashboard = ({ user, onLogout }) => {
         try {
             setIsSegmenting(true);
             const result = await startSegmentation(activeFileId, roiCoords);
-            setMaskImage(`http://localhost:8000${result.mask_url}`);
+            
+            // DÜZELTİLDİ: Localhost yerine BASE_URL kullanıyoruz
+            setMaskImage(`${BASE_URL}${result.mask_url}`);
+            
         } catch (error) {
             console.error("Segmentasyon hatası:", error);
             alert("Analiz sırasında bir hata oluştu.");
@@ -182,7 +191,7 @@ const MainDashboard = ({ user, onLogout }) => {
                                                 mainImage={mainImage} 
                                                 maskImage={maskImage} 
                                                 viewMode={viewMode}
-                                                interactionMode={interactionMode} // YENİ: Modu NiiVue'ye pasla
+                                                interactionMode={interactionMode} 
                                             />
                                         ) : (
                                             <div className="empty-state">
@@ -196,7 +205,6 @@ const MainDashboard = ({ user, onLogout }) => {
                                         <div className="viewer-controls" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#1e293b', padding: '10px 1.5rem' }}>
                                             
                                             <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-                                                {/* YENİ: ETKİLEŞİM MODU BUTONLARI (PAN / SELECT) */}
                                                 <div className="btn-group" style={{ borderRight: '1px solid #334155', paddingRight: '15px' }}>
                                                     <button 
                                                         className={`view-btn ${interactionMode === 'pan' ? 'active' : ''}`} 

@@ -19,7 +19,7 @@ const Auth = ({ onLoginSuccess, initialMode }) => {
         try {
             if (isLogin) {
                 const data = await login(formData.username, formData.password);
-                onLoginSuccess(data);
+                onLoginSuccess(data); // App.js'e bildir
                 navigate('/dashboard');
             } else {
                 await register(formData.username, formData.password);
@@ -33,32 +33,46 @@ const Auth = ({ onLoginSuccess, initialMode }) => {
     };
 
     // ==========================================
-    // 2. GOOGLE LOGIN AKIŞI (LOGLAMALI)
+    // 2. GOOGLE LOGIN AKIŞI (DÜZELTİLDİ)
     // ==========================================
     const loginWithGoogle = useGoogleLogin({
         onSuccess: async (tokenResponse) => {
-            console.log("✅ 1. [GOOGLE BAŞARILI]: Erişim kodu geldi:", tokenResponse);
+            console.log("✅ 1. [GOOGLE BAŞARILI]:", tokenResponse);
             
             try {
-                console.log("🚀 2. [BACKEND İSTEĞİ]: Token backend'e gönderiliyor...");
-                // Google'dan gelen access_token'ı backend'e gönderiyoruz
-                const realDatabaseUser = await googleLogin(tokenResponse.access_token);
+                setMessage("Doğrulanıyor...");
+                // Backend'e access_token'ı gönder
+                const responseData = await googleLogin(tokenResponse.access_token);
                 
-                console.log("🎉 3. [BACKEND BAŞARILI]: Kullanıcı işlendi:", realDatabaseUser);
+                // KRİTİK: Backend'den 'access_token' gelirse onu 'token' olarak formatla
+                const userData = {
+                    token: responseData.access_token, // Backend'in 'access_token'ını 'token' yapıyoruz
+                    username: responseData.username,
+                    userId: responseData.user_id
+                };
+
+                console.log("🎉 2. [YETKİLENDİRME BAŞARILI]:", userData);
                 
-                localStorage.setItem('user', JSON.stringify(realDatabaseUser));
-                onLoginSuccess(realDatabaseUser);
+                // TARAYICIYA KAYDET
+                localStorage.setItem('user', JSON.stringify(userData));
+
+                // APP.JS STATE'İNİ GÜNCELLE (Authorize olmanı sağlayan yer!)
+                if (onLoginSuccess) {
+                    onLoginSuccess(userData);
+                }
+
+                // DASHBOARD'A GİT
                 navigate('/dashboard');
+
             } catch (err) {
-                console.error("❌ [BACKEND HATASI]:", err.response?.data || err.message);
+                console.error("❌ Backend Hatası:", err);
                 setMessage("Google girişi backend tarafında onaylanamadı.");
             }
         },
         onError: (errorResponse) => {
-            console.error("❌ [GOOGLE LOGIN HATASI]: Google tarafı isteği reddetti!", errorResponse);
-            setMessage("Google yetkilendirme hatası (Origin hatası olabilir).");
+            console.error("❌ Google Login Hatası:", errorResponse);
+            setMessage("Google yetkilendirme hatası.");
         },
-        // Implicit flow genellikle Origin hatalarını aşmak için daha stabildir
         flow: 'implicit' 
     });
 
@@ -106,14 +120,10 @@ const Auth = ({ onLoginSuccess, initialMode }) => {
                 </div>
                 
                 <div className="google-btn-wrapper">
-                    {/* Hata veren standart buton yerine kontrol edilebilir özel buton */}
                     <button 
                         type="button" 
                         className="google-custom-btn" 
-                        onClick={() => {
-                            console.log("⚡ 0. [BAŞLAT]: Google Butona tıklandı.");
-                            loginWithGoogle();
-                        }}
+                        onClick={() => loginWithGoogle()}
                         style={{
                             width: '100%',
                             padding: '12px',
@@ -126,11 +136,8 @@ const Auth = ({ onLoginSuccess, initialMode }) => {
                             border: '1px solid #ddd',
                             borderRadius: '8px',
                             cursor: 'pointer',
-                            fontWeight: 'bold',
-                            transition: 'background 0.3s'
+                            fontWeight: 'bold'
                         }}
-                        onMouseOver={(e) => e.target.style.backgroundColor = '#f8f9fa'}
-                        onMouseOut={(e) => e.target.style.backgroundColor = 'white'}
                     >
                         <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_Logo.svg" alt="G" width="20"/>
                         Google ile {isLogin ? 'Giriş Yap' : 'Kayıt Ol'}
@@ -142,8 +149,8 @@ const Auth = ({ onLoginSuccess, initialMode }) => {
                 </p>
                 
                 {message && (
-                    <div className={`message ${message.includes('başarılı') ? 'success' : 'error'}`} 
-                         style={{ marginTop: '15px', padding: '10px', borderRadius: '5px', textAlign: 'center', backgroundColor: message.includes('başarılı') ? '#dcfce7' : '#fee2e2', color: message.includes('başarılı') ? '#166534' : '#991b1b' }}>
+                    <div className={`message ${message.includes('başarılı') || message.includes('Doğrulanıyor') ? 'success' : 'error'}`} 
+                         style={{ marginTop: '15px', padding: '10px', borderRadius: '5px', textAlign: 'center' }}>
                         {message}
                     </div>
                 )}

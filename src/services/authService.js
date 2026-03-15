@@ -7,28 +7,29 @@ const API_URL = 'http://oncovisionai.com.tr/api/auth';
 // src/services/authService.js
 
 export const googleLogin = async (googleToken) => {
-    console.log("Log: Canlı Sunucuya giden token:", googleToken);
-    
     try {
-        // Canlıda endpoint genelde /google olur
         const response = await axios.post(`${API_URL}/google`, {
             token: googleToken 
         });
-        
-        console.log("Log: Sunucudan gelen yanıt:", response.data);
-        
-        // Eğer sunucu sadece token döndürüyorsa localstorage'a kaydet
+
+        // Backend'den { access_token: "...", user_id: 1, username: "..." } geldiğini varsayıyoruz
         if (response.data.access_token) {
-            localStorage.setItem('user', JSON.stringify(response.data));
+            const userData = {
+                token: response.data.access_token, // Diğer servisler 'token' ismini bekler
+                username: response.data.username,
+                userId: response.data.user_id
+            };
+            
+            // TARAYICIYA KAYDET (Dashboard bunu okuyacak)
+            localStorage.setItem('user', JSON.stringify(userData));
+            return userData;
         }
-        
         return response.data;
     } catch (error) {
-        console.error("❌ Canlı Sunucu Google Hatası:", error.response?.data || error.message);
+        console.error("Google Login Servis Hatası:", error);
         throw error;
     }
 };
-
 // LOGIN FONKSİYONU
 export const login = async (username, password) => {
     const params = new URLSearchParams();
