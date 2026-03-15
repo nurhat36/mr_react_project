@@ -1,16 +1,28 @@
 import axios from 'axios';
 
-const API_URL = 'http://oncovisionai.com.tr/api';
+// CANLI VE LOCAL AYRIMI (Otomatik)
+// NOT: Canlı sunucu adresi https olarak güncellendi!
+const API_URL = window.location.hostname === 'localhost' 
+    ? 'http://localhost:8000/api' 
+    : 'https://oncovisionai.com.tr/api';
 
+// Her istekte kullanıcının token'ını header'a ekleyen yardımcı fonksiyon
 const getAuthHeaders = (isMultipart = false) => {
     const userStr = localStorage.getItem('user');
-    if (!userStr) return {};
-    const user = JSON.parse(userStr);
     
+    // Eğer kullanıcı giriş yapmamışsa uyar (Hata ayıklamayı kolaylaştırır)
+    if (!userStr) {
+        console.warn("Yetki Uyarısı: Token bulunamadı. Lütfen giriş yapın.");
+        return {};
+    }
+    
+    const user = JSON.parse(userStr);
     const headers = { Authorization: `Bearer ${user.token}` };
+    
     if (isMultipart) {
         headers['Content-Type'] = 'multipart/form-data';
     }
+    
     return { headers };
 };
 
@@ -28,26 +40,25 @@ export const uploadPatientFile = async (patientId, file) => {
     const response = await axios.post(`${API_URL}/files/${patientId}`, formData, getAuthHeaders(true));
     return response.data;
 };
-// fileService.js dosyasının en altına EKLENECEK KOD:
 
-export const startSegmentation = async (fileId) => {
+// ==========================================
+// SEGMENTASYON BAŞLATMA (Güncellendi)
+// ==========================================
+export const startSegmentation = async (fileId, roi = null) => {
     const formData = new FormData();
-    // NIfTI dosyaları için backend bu değerleri 0 bekliyor
-    formData.append('x', 0);
-    formData.append('y', 0);
-    formData.append('width', 0);
-    formData.append('height', 0);
+    
+    // Dashboard'dan gelen ROI (Seçim Kutusu) koordinatları varsa onları kullan, yoksa 0 gönder
+    formData.append('x', roi?.x || 0);
+    formData.append('y', roi?.y || 0);
+    formData.append('z', roi?.z || 0); // 3D için Z eksenini de ekledik
+    
+    // Modelin kırpacağı (crop) alanın varsayılan genişliği
+    formData.append('width', 64); 
+    formData.append('height', 64);
     formData.append('shape', 'rectangle');
 
-    const userStr = localStorage.getItem('user');
-    const user = JSON.parse(userStr);
-
-    const response = await axios.post(`${API_URL}/segment/${fileId}`, formData, {
-        headers: {
-            'Authorization': `Bearer ${user.token}`,
-            'Content-Type': 'multipart/form-data'
-        }
-    });
+    // getAuthHeaders(true) kullanarak multipart (form-data) ayarını ve Token'ı otomatik çekiyoruz
+    const response = await axios.post(`${API_URL}/segment/${fileId}`, formData, getAuthHeaders(true));
     
     return response.data;
 };

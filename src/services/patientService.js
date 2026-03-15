@@ -1,12 +1,23 @@
 import axios from 'axios';
 
-// Docker'da çalışırken de bu adres kullanılacak (Nginx ayarlarında 8000'e proxy yapılabilir ama şimdilik localhost:8000 ideal)
-const API_URL = 'http://oncovisionai.com.tr/api/patients';
+// CANLI VE LOCAL AYRIMI (Otomatik)
+// NOT: Canlı sunucu adresi https olarak güncellendi!
+const BASE_URL = window.location.hostname === 'localhost' 
+    ? 'http://localhost:8000/api' 
+    : 'https://oncovisionai.com.tr/api';
+
+const API_URL = `${BASE_URL}/patients`;
 
 // Her istekte kullanıcının token'ını header'a ekleyen yardımcı fonksiyon
 const getAuthHeaders = () => {
     const userStr = localStorage.getItem('user');
-    if (!userStr) return {};
+    
+    // Eğer kullanıcı giriş yapmamışsa uyar (Hata ayıklamayı kolaylaştırır)
+    if (!userStr) {
+        console.warn("Yetki Uyarısı: Token bulunamadı. Lütfen giriş yapın.");
+        return {};
+    }
+    
     const user = JSON.parse(userStr);
     return {
         headers: { Authorization: `Bearer ${user.token}` }
