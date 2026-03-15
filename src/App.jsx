@@ -1,53 +1,38 @@
+// src/App.js
 import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { GoogleOAuthProvider } from '@react-oauth/google';
 import Auth from './pages/Auth';
 import MainDashboard from './pages/MainDashboard';
-import LandingPage from './pages/LandingPage'; // Yeni ekleyeceğimiz tanıtım sayfası
+import LandingPage from './pages/LandingPage';
 import './App.css';
+
+const GOOGLE_CLIENT_ID = "636599479269-8f0sbt9dpchjfit9so8la30heiqc8ckl.apps.googleusercontent.com";
 
 function App() {
   const [user, setUser] = useState(null);
-  const [showAuth, setShowAuth] = useState(false); // Giriş/Kayıt ekranını kontrol eder
-  const [authMode, setAuthMode] = useState('login'); // 'login' veya 'register' sekmesi için
 
   useEffect(() => {
-    // Sayfa yenilendiğinde kullanıcı zaten giriş yapmış mı kontrol et
     const loggedInUser = localStorage.getItem('user');
-    if (loggedInUser) {
-        setUser(JSON.parse(loggedInUser));
-    }
+    if (loggedInUser) setUser(JSON.parse(loggedInUser));
   }, []);
 
-  // 1. DURUM: Kullanıcı giriş yapmışsa direkt ana paneli (MR Projeni) göster
-  if (user) {
-    return (
-        <MainDashboard 
-            user={user} 
-            onLogout={() => { 
-                localStorage.removeItem('user'); 
-                setUser(null); 
-                setShowAuth(false); // Çıkış yapınca tanıtım sayfasına dönsün
-            }} 
-        />
-    );
-  }
+  const handleLogout = () => {
+    localStorage.removeItem('user');
+    setUser(null);
+  };
 
-  // 2. DURUM: Kullanıcı giriş yapmamış ama Login/Register butonuna basmışsa Auth'u göster
-  if (showAuth) {
-    return (
-        <Auth 
-            initialMode={authMode} // Auth bileşenine login mi register mı açılacağını söyler
-            onBack={() => setShowAuth(false)} // Tanıtım sayfasına geri dönmek için
-            onLoginSuccess={(userData) => setUser(userData)} 
-        />
-    );
-  }
-
-  // 3. DURUM: İlk açılış (Kullanıcı yok ve Auth ekranı açık değil) - Tanıtım Sayfası
   return (
-      <LandingPage 
-          onLoginClick={() => { setAuthMode('login'); setShowAuth(true); }}
-          onRegisterClick={() => { setAuthMode('register'); setShowAuth(true); }}
-      />
+    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+      <Router>
+        <Routes>
+          <Route path="/" element={user ? <Navigate to="/dashboard" /> : <LandingPage />} />
+          <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <Auth initialMode="login" onLoginSuccess={setUser} />} />
+          <Route path="/register" element={user ? <Navigate to="/dashboard" /> : <Auth initialMode="register" onLoginSuccess={setUser} />} />
+          <Route path="/dashboard" element={user ? <MainDashboard user={user} onLogout={handleLogout} /> : <Navigate to="/login" />} />
+        </Routes>
+      </Router>
+    </GoogleOAuthProvider>
   );
 }
 

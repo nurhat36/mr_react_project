@@ -1,6 +1,7 @@
 // src/pages/LandingPage.jsx
 import React from 'react';
 import '../styles/LandingPage.css';
+import { useNavigate } from 'react-router-dom';
 // Temiz dosya adıyla import et (Yolun kendi klasör yapına uygun olduğundan emin ol)
 import logo from '../assets/logo.svg';
 import { 
@@ -9,6 +10,7 @@ import {
 } from 'lucide-react';
 
 function LandingPage({ onLoginClick, onRegisterClick }) {
+    const navigate = useNavigate();
   return (
     <div className="landing-container">
       {/* 1. Üst Menü (Navbar) */}
@@ -20,8 +22,8 @@ function LandingPage({ onLoginClick, onRegisterClick }) {
         <span>OncoVisionAI</span>
         </div>
         <div className="nav-buttons">
-          <button onClick={onLoginClick} className="btn-login">Giriş Yap</button>
-          <button onClick={onRegisterClick} className="btn-register">Kayıt Ol</button>
+          <button onClick={() => navigate('/login')} className="btn-login">Giriş Yap</button>
+          <button onClick={() => navigate('/register')} className="btn-register">Kayıt Ol</button>
         </div>
       </header>
 
