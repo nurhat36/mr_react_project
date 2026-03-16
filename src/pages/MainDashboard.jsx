@@ -11,11 +11,12 @@ import {
     File, 
     Loader2, 
     BrainCircuit,
-    Move,     // El simgesi
-    Square    // Seçim simgesi
+    Move, 
+    Square,
+    CheckCircle
 } from 'lucide-react';
 
-// YENİ: CANLI VE LOCAL AYRIMI İÇİN BASE_URL
+// DİKKAT: API istekleri için değil, statik dosyaları çekmek için kök URL
 const BASE_URL = window.location.hostname === 'localhost' 
     ? 'http://localhost:8000' 
     : 'http://oncovisionai.com.tr';
@@ -35,6 +36,7 @@ const MainDashboard = ({ user, onLogout }) => {
     const [interactionMode, setInteractionMode] = useState('pan');
     const [roiCoords, setRoiCoords] = useState(null);
 
+    // NiiVue'den gelen seçim koordinatlarını dinle
     useEffect(() => {
         window.onROISelected = (coords) => {
             console.log("Seçilen ROI Koordinatları:", coords);
@@ -67,31 +69,50 @@ const MainDashboard = ({ user, onLogout }) => {
         try {
             setUploading(true);
             const result = await uploadPatientFile(selectedPatient.id, file);
-            await fetchFiles(selectedPatient.id);
+            
+            // Yükleme bitince listeyi arka planda yenile
+            await fetchFiles(selectedPatient.id); 
+            
             setActiveFileId(result.id);
             setMainImage({ 
                 url: URL.createObjectURL(file), 
                 name: file.name 
             }); 
+            setMaskImage(null); 
+            setRoiCoords(null);
         } catch (error) {
             console.error("Yükleme hatası:", error);
+            alert("Dosya yüklenirken bir hata oluştu.");
         } finally {
             setUploading(false);
         }
     };
 
+    // ==========================================
+    // DOSYAYA TIKLANDIĞINDA ÇALIŞAN MANTIK
+    // ==========================================
     const handleFileClick = (fileRecord) => {
         setActiveFileId(fileRecord.id); 
-        setMaskImage(null); 
         setRoiCoords(null);
         
-        // DÜZELTİLDİ: Localhost yerine BASE_URL kullanıyoruz
+        // 1. Ana Görüntü (Ham MR) URL'sini oluştur
         const cleanPath = fileRecord.file_path.replace(/\\/g, '/');
-        const fullUrl = `${BASE_URL}/${cleanPath}`;
-        
+        const fullUrl = cleanPath.startsWith('/') ? `${BASE_URL}${cleanPath}` : `${BASE_URL}/${cleanPath}`;
         setMainImage({ url: fullUrl, name: fileRecord.filename });
+
+        // 2. Eğer dosya analiz edildiyse (segmented) maskeyi de otomatik yükle
+        if (fileRecord.status === 'segmented' && fileRecord.mask_url) {
+            const cleanMaskPath = fileRecord.mask_url.replace(/\\/g, '/');
+            const fullMaskUrl = cleanMaskPath.startsWith('/') ? `${BASE_URL}${cleanMaskPath}` : `${BASE_URL}/${cleanMaskPath}`;
+            setMaskImage(fullMaskUrl);
+        } else {
+            setMaskImage(null); 
+        }
     };
 
+    // ==========================================
+    // YAPAY ZEKA ANALİZİNİ BAŞLAT
+    // ==========================================
     const handleSegmentClick = async () => {
         if (!activeFileId) {
             alert("Lütfen önce analiz edilecek bir dosya seçin.");
@@ -101,16 +122,28 @@ const MainDashboard = ({ user, onLogout }) => {
             setIsSegmenting(true);
             const result = await startSegmentation(activeFileId, roiCoords);
             
-            // DÜZELTİLDİ: Localhost yerine BASE_URL kullanıyoruz
-            setMaskImage(`${BASE_URL}${result.mask_url}`);
+            // Dönen yeni maskeyi ekrana bas
+            const newMaskPath = result.mask_url.replace(/\\/g, '/');
+            const fullMaskUrl = newMaskPath.startsWith('/') ? `${BASE_URL}${newMaskPath}` : `${BASE_URL}/${newMaskPath}`;
+            setMaskImage(fullMaskUrl);
             
+            // Analiz bitince sol menüdeki durumu (Ham -> Analizli) güncellemek için dosyaları yeniden çekiyoruz!
+            if (selectedPatient) {
+                await fetchFiles(selectedPatient.id);
+            }
+            
+            setRoiCoords(null); // Başarılı analiz sonrası seçim kutusunu sıfırla
         } catch (error) {
             console.error("Segmentasyon hatası:", error);
-            alert("Analiz sırasında bir hata oluştu.");
+            alert("Analiz sırasında bir hata oluştu. Lütfen bağlantınızı kontrol edin.");
         } finally {
             setIsSegmenting(false);
         }
     };
+
+    // Seçili dosyanın mevcut durumunu bul (Buton metnini değiştirmek için)
+    const currentActiveFile = patientFiles.find(f => f.id === activeFileId);
+    const isActiveFileSegmented = currentActiveFile?.status === 'segmented';
 
     return (
         <div className="dashboard-layout">
@@ -171,17 +204,41 @@ const MainDashboard = ({ user, onLogout }) => {
                                         </label>
                                     </div>
 
+                                    {/* MODERN DOSYA LİSTESİ (ROZETLİ TASARIM) */}
                                     {patientFiles.length > 0 && (
-                                        <div className="patient-files-bar">
-                                            {patientFiles.map(f => (
-                                                <button 
-                                                    key={f.id} 
-                                                    className={`file-chip ${activeFileId === f.id ? 'active' : ''}`} 
-                                                    onClick={() => handleFileClick(f)}
-                                                >
-                                                    <File size={14} /> {f.filename.substring(0, 15)}...
-                                                </button>
-                                            ))}
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', padding: '15px', background: '#0f172a', borderBottom: '1px solid #1e293b' }}>
+                                            {patientFiles.map(f => {
+                                                const isSegmented = f.status === 'segmented';
+                                                const isActive = activeFileId === f.id;
+                                                
+                                                return (
+                                                    <button 
+                                                        key={f.id} 
+                                                        onClick={() => handleFileClick(f)}
+                                                        style={{
+                                                            display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 15px',
+                                                            background: isActive ? '#1e293b' : '#334155',
+                                                            border: `1px solid ${isActive ? (isSegmented ? '#10b981' : '#3b82f6') : 'transparent'}`,
+                                                            borderRadius: '8px', cursor: 'pointer', transition: '0.2s',
+                                                            minWidth: '220px', textAlign: 'left'
+                                                        }}
+                                                    >
+                                                        {isSegmented ? (
+                                                            <CheckCircle size={22} color="#10b981" />
+                                                        ) : (
+                                                            <File size={22} color="#94a3b8" />
+                                                        )}
+                                                        <div>
+                                                            <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: 'white' }}>
+                                                                {f.filename.length > 20 ? f.filename.substring(0, 20) + '...' : f.filename}
+                                                            </div>
+                                                            <div style={{ fontSize: '0.75rem', color: isSegmented ? '#10b981' : '#94a3b8', marginTop: '4px' }}>
+                                                                {isSegmented ? 'Yapay Zeka Analizli' : 'Ham Görüntü (İşlem Bekliyor)'}
+                                                            </div>
+                                                        </div>
+                                                    </button>
+                                                )
+                                            })}
                                         </div>
                                     )}
 
@@ -196,7 +253,7 @@ const MainDashboard = ({ user, onLogout }) => {
                                         ) : (
                                             <div className="empty-state">
                                                 <Database size={48} />
-                                                <p>Görüntülemek için yukarıdan yeni MR yükleyin veya seçin</p>
+                                                <p>Görüntülemek için yukarıdan yeni MR yükleyin veya listeden seçin</p>
                                             </div>
                                         )}
                                     </div>
@@ -242,14 +299,14 @@ const MainDashboard = ({ user, onLogout }) => {
                                                     disabled={isSegmenting}
                                                     className="segment-btn"
                                                     style={{
-                                                        background: isSegmenting ? '#475569' : 'linear-gradient(90deg, #10b981, #059669)',
+                                                        background: isSegmenting ? '#475569' : (isActiveFileSegmented ? 'linear-gradient(90deg, #3b82f6, #2563eb)' : 'linear-gradient(90deg, #10b981, #059669)'),
                                                         color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px',
                                                         display: 'flex', alignItems: 'center', gap: '8px', cursor: isSegmenting ? 'not-allowed' : 'pointer',
                                                         fontWeight: 'bold', boxShadow: '0 4px 6px rgba(0,0,0,0.2)', transition: '0.3s'
                                                     }}
                                                 >
                                                     {isSegmenting ? <Loader2 size={18} className="animate-spin" /> : <BrainCircuit size={18} />}
-                                                    {isSegmenting ? 'AI İşleniyor...' : 'AI Analizini Başlat'}
+                                                    {isSegmenting ? 'AI İşleniyor...' : (isActiveFileSegmented ? 'Yeniden Analiz Et' : 'AI Analizini Başlat')}
                                                 </button>
                                             </div>
                                         </div>
