@@ -13,10 +13,10 @@ import {
     BrainCircuit,
     Move, 
     Square,
-    CheckCircle
+    CheckCircle,
+    Download // YENİ: İndirme ikonu eklendi
 } from 'lucide-react';
 
-// DİKKAT: API istekleri için değil, statik dosyaları çekmek için kök URL
 const BASE_URL = window.location.hostname === 'localhost' 
     ? 'http://localhost:8000' 
     : 'http://oncovisionai.com.tr';
@@ -36,7 +36,6 @@ const MainDashboard = ({ user, onLogout }) => {
     const [interactionMode, setInteractionMode] = useState('pan');
     const [roiCoords, setRoiCoords] = useState(null);
 
-    // NiiVue'den gelen seçim koordinatlarını dinle
     useEffect(() => {
         window.onROISelected = (coords) => {
             console.log("Seçilen ROI Koordinatları:", coords);
@@ -70,7 +69,6 @@ const MainDashboard = ({ user, onLogout }) => {
             setUploading(true);
             const result = await uploadPatientFile(selectedPatient.id, file);
             
-            // Yükleme bitince listeyi arka planda yenile
             await fetchFiles(selectedPatient.id); 
             
             setActiveFileId(result.id);
@@ -88,19 +86,14 @@ const MainDashboard = ({ user, onLogout }) => {
         }
     };
 
-    // ==========================================
-    // DOSYAYA TIKLANDIĞINDA ÇALIŞAN MANTIK
-    // ==========================================
     const handleFileClick = (fileRecord) => {
         setActiveFileId(fileRecord.id); 
         setRoiCoords(null);
         
-        // 1. Ana Görüntü (Ham MR) URL'sini oluştur
         const cleanPath = fileRecord.file_path.replace(/\\/g, '/');
         const fullUrl = cleanPath.startsWith('/') ? `${BASE_URL}${cleanPath}` : `${BASE_URL}/${cleanPath}`;
         setMainImage({ url: fullUrl, name: fileRecord.filename });
 
-        // 2. Eğer dosya analiz edildiyse (segmented) maskeyi de otomatik yükle
         if (fileRecord.status === 'segmented' && fileRecord.mask_url) {
             const cleanMaskPath = fileRecord.mask_url.replace(/\\/g, '/');
             const fullMaskUrl = cleanMaskPath.startsWith('/') ? `${BASE_URL}${cleanMaskPath}` : `${BASE_URL}/${cleanMaskPath}`;
@@ -110,9 +103,6 @@ const MainDashboard = ({ user, onLogout }) => {
         }
     };
 
-    // ==========================================
-    // YAPAY ZEKA ANALİZİNİ BAŞLAT
-    // ==========================================
     const handleSegmentClick = async () => {
         if (!activeFileId) {
             alert("Lütfen önce analiz edilecek bir dosya seçin.");
@@ -122,17 +112,15 @@ const MainDashboard = ({ user, onLogout }) => {
             setIsSegmenting(true);
             const result = await startSegmentation(activeFileId, roiCoords);
             
-            // Dönen yeni maskeyi ekrana bas
             const newMaskPath = result.mask_url.replace(/\\/g, '/');
             const fullMaskUrl = newMaskPath.startsWith('/') ? `${BASE_URL}${newMaskPath}` : `${BASE_URL}/${newMaskPath}`;
             setMaskImage(fullMaskUrl);
             
-            // Analiz bitince sol menüdeki durumu (Ham -> Analizli) güncellemek için dosyaları yeniden çekiyoruz!
             if (selectedPatient) {
                 await fetchFiles(selectedPatient.id);
             }
             
-            setRoiCoords(null); // Başarılı analiz sonrası seçim kutusunu sıfırla
+            setRoiCoords(null); 
         } catch (error) {
             console.error("Segmentasyon hatası:", error);
             alert("Analiz sırasında bir hata oluştu. Lütfen bağlantınızı kontrol edin.");
@@ -141,7 +129,31 @@ const MainDashboard = ({ user, onLogout }) => {
         }
     };
 
-    // Seçili dosyanın mevcut durumunu bul (Buton metnini değiştirmek için)
+    // ==========================================
+    // YENİ: DOSYA İNDİRME FONKSİYONU
+    // ==========================================
+    const handleDownload = async (url, defaultFilename) => {
+        if (!url) return;
+        try {
+            // Tarayıcının yeni sekmede açmasını engellemek için dosyayı Blob olarak çekiyoruz
+            const response = await fetch(url);
+            const blob = await response.blob();
+            const blobUrl = window.URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = defaultFilename || 'oncovision_dosya';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(blobUrl);
+        } catch (error) {
+            console.error("İndirme hatası:", error);
+            // Eğer CORS vb. engellerse B planı olarak normal linkle aç (tarayıcı indirir)
+            window.open(url, '_blank');
+        }
+    };
+
     const currentActiveFile = patientFiles.find(f => f.id === activeFileId);
     const isActiveFileSegmented = currentActiveFile?.status === 'segmented';
 
@@ -204,7 +216,6 @@ const MainDashboard = ({ user, onLogout }) => {
                                         </label>
                                     </div>
 
-                                    {/* MODERN DOSYA LİSTESİ (ROZETLİ TASARIM) */}
                                     {patientFiles.length > 0 && (
                                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', padding: '15px', background: '#0f172a', borderBottom: '1px solid #1e293b' }}>
                                             {patientFiles.map(f => {
@@ -293,6 +304,29 @@ const MainDashboard = ({ user, onLogout }) => {
                                             </div>
 
                                             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                                                {/* YENİ: İNDİRME BUTONLARI */}
+                                                <button 
+                                                    onClick={() => handleDownload(mainImage.url, mainImage.name)}
+                                                    className="view-btn"
+                                                    title="Orijinal Görüntüyü İndir"
+                                                    style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#334155', padding: '8px 12px', border: 'none', borderRadius: '6px', cursor: 'pointer', color: 'white' }}
+                                                >
+                                                    <Download size={16} /> <span style={{fontSize: '0.8rem', fontWeight: 'bold'}}>Orijinal</span>
+                                                </button>
+
+                                                {maskImage && (
+                                                    <button 
+                                                        onClick={() => handleDownload(maskImage, `maske_${mainImage.name}`)}
+                                                        className="view-btn"
+                                                        title="Üretilen Maskeyi İndir"
+                                                        style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#334155', padding: '8px 12px', border: 'none', borderRadius: '6px', cursor: 'pointer', color: '#10b981' }}
+                                                    >
+                                                        <Download size={16} /> <span style={{fontSize: '0.8rem', fontWeight: 'bold'}}>Maske</span>
+                                                    </button>
+                                                )}
+
+                                                <div style={{ width: '1px', height: '30px', background: '#334155', margin: '0 5px' }}></div>
+
                                                 {roiCoords && <span style={{ color: '#10b981', fontSize: '0.7rem', fontWeight: 'bold' }}>✔ BÖLGE SEÇİLDİ</span>}
                                                 <button 
                                                     onClick={handleSegmentClick} 
