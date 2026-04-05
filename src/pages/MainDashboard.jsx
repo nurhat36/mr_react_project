@@ -1,20 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import NiiVueViewer from '../components/NiiVueViewer';
 import PatientList from '../components/PatientList';
-import { getPatientFiles, uploadPatientFile, startSegmentation } from '../services/fileService';
 import { 
-    Upload, 
-    Activity, 
-    Database, 
-    LogOut, 
-    User as UserIcon, 
-    File, 
-    Loader2, 
-    BrainCircuit,
-    Move, 
-    Square,
-    CheckCircle,
-    Download
+    getPatientFiles, 
+    uploadPatientFile, 
+    startSegmentation,
+    getMasksByFile, // YENİ EKLENDİ
+    deleteFile,     // YENİ EKLENDİ
+    deleteMask      // YENİ EKLENDİ
+} from '../services/fileService';
+import { 
+    Upload, Activity, Database, LogOut, User as UserIcon, 
+    File, Loader2, BrainCircuit, Move, Square, CheckCircle, 
+    Download, ChevronDown, ChevronUp, CornerDownRight, Trash2 
 } from 'lucide-react';
 
 const BASE_URL = window.location.hostname === 'localhost' 
@@ -28,6 +26,7 @@ const MainDashboard = ({ user, onLogout }) => {
     const [viewMode, setViewMode] = useState('multiplanar'); 
     
     const [activeFileId, setActiveFileId] = useState(null); 
+    const [activeMaskId, setActiveMaskId] = useState(null);
     const [isSegmenting, setIsSegmenting] = useState(false);
     
     const [mainImage, setMainImage] = useState(null);
@@ -36,10 +35,14 @@ const MainDashboard = ({ user, onLogout }) => {
     const [interactionMode, setInteractionMode] = useState('pan');
     const [roiCoords, setRoiCoords] = useState(null);
 
-    // --- YENİ: İNDİRME İLERLEME DURUMLARI ---
     const [isDownloading, setIsDownloading] = useState(false);
     const [downloadProgress, setDownloadProgress] = useState(0);
     const [downloadDetails, setDownloadDetails] = useState('');
+
+    // --- ACCORDION (AÇILIR MENÜ) DURUMLARI ---
+    const [expandedFileId, setExpandedFileId] = useState(null);
+    const [fileMasks, setFileMasks] = useState({});
+    const [isLoadingMasks, setIsLoadingMasks] = useState({});
 
     useEffect(() => {
         window.onROISelected = (coords) => {
@@ -53,6 +56,8 @@ const MainDashboard = ({ user, onLogout }) => {
         setMainImage(null); 
         setMaskImage(null);
         setActiveFileId(null);
+        setActiveMaskId(null);
+        setExpandedFileId(null);
         setRoiCoords(null);
         fetchFiles(patient.id);
     };
@@ -66,6 +71,73 @@ const MainDashboard = ({ user, onLogout }) => {
         }
     };
 
+    // ==========================================
+    // ALT MENÜ AÇMA / KAPATMA (API SERVICE KULLANARAK)
+    // ==========================================
+    const toggleFileExpand = async (e, fileId) => {
+        e.stopPropagation(); 
+        if (expandedFileId === fileId) {
+            setExpandedFileId(null); 
+            return;
+        }
+
+        setExpandedFileId(fileId);
+
+        if (!fileMasks[fileId]) {
+            setIsLoadingMasks(prev => ({ ...prev, [fileId]: true }));
+            try {
+                // YENİ: Doğrudan fileService.js içindeki fonksiyonu kullanıyoruz
+                const data = await getMasksByFile(fileId);
+                setFileMasks(prev => ({ ...prev, [fileId]: data }));
+            } catch (err) {
+                console.error("Maskeler çekilirken hata:", err);
+            } finally {
+                setIsLoadingMasks(prev => ({ ...prev, [fileId]: false }));
+            }
+        }
+    };
+
+    // ==========================================
+    // SİLME İŞLEMLERİ (API SERVICE KULLANARAK)
+    // ==========================================
+    const handleDeleteFile = async (e, fileId, filename) => {
+        e.stopPropagation();
+        if (!window.confirm(`'${filename}' dosyasını ve ona ait tüm maskeleri silmek istediğinize emin misiniz?`)) return;
+
+        try {
+            await deleteFile(fileId);
+            if (activeFileId === fileId) {
+                setMainImage(null); setMaskImage(null);
+                setActiveFileId(null); setActiveMaskId(null);
+            }
+            fetchFiles(selectedPatient.id);
+        } catch (error) {
+            console.error(error);
+            alert("Silme sırasında hata oluştu.");
+        }
+    };
+
+    const handleDeleteMask = async (e, maskId, fileId) => {
+        e.stopPropagation();
+        if (!window.confirm(`Bu yapay zeka analizini silmek istediğinize emin misiniz?`)) return;
+
+        try {
+            await deleteMask(maskId);
+            // Sadece arayüzü güncelle (Komple sayfayı yenilemeye gerek yok)
+            setFileMasks(prev => ({
+                ...prev,
+                [fileId]: prev[fileId].filter(m => m.id !== maskId)
+            }));
+            
+            if (activeMaskId === maskId) {
+                setMaskImage(null); setActiveMaskId(null);
+            }
+        } catch (error) {
+            console.error(error);
+            alert("Maske silinemedi.");
+        }
+    };
+
     const handleFileUpload = async (e) => {
         const file = e.target.files[0];
         if (!file || !selectedPatient) return;
@@ -76,6 +148,8 @@ const MainDashboard = ({ user, onLogout }) => {
             await fetchFiles(selectedPatient.id); 
             
             setActiveFileId(result.id);
+            setActiveMaskId(null);
+            setExpandedFileId(null);
             setMainImage({ url: URL.createObjectURL(file), name: file.name }); 
             setMaskImage(null); 
             setRoiCoords(null);
@@ -87,8 +161,10 @@ const MainDashboard = ({ user, onLogout }) => {
         }
     };
 
+    // Ana Dosyaya Tıklanınca
     const handleFileClick = (fileRecord) => {
         setActiveFileId(fileRecord.id); 
+        setActiveMaskId(null); 
         setRoiCoords(null);
         
         const cleanPath = fileRecord.file_path.replace(/\\/g, '/');
@@ -102,6 +178,21 @@ const MainDashboard = ({ user, onLogout }) => {
         } else {
             setMaskImage(null); 
         }
+    };
+
+    // Alt Maskeye Tıklanınca
+    const handleSpecificMaskClick = (fileRecord, maskRecord) => {
+        setActiveFileId(fileRecord.id);
+        setActiveMaskId(maskRecord.id); 
+        setRoiCoords(null);
+
+        const cleanPath = fileRecord.file_path.replace(/\\/g, '/');
+        const fullUrl = cleanPath.startsWith('/') ? `${BASE_URL}${cleanPath}` : `${BASE_URL}/${cleanPath}`;
+        setMainImage({ url: fullUrl, name: fileRecord.filename });
+
+        const cleanMaskPath = maskRecord.mask_url.replace(/\\/g, '/');
+        const fullMaskUrl = cleanMaskPath.startsWith('/') ? `${BASE_URL}${cleanMaskPath}` : `${BASE_URL}/${cleanMaskPath}`;
+        setMaskImage(fullMaskUrl);
     };
 
     const handleSegmentClick = async () => {
@@ -118,18 +209,25 @@ const MainDashboard = ({ user, onLogout }) => {
             setMaskImage(fullMaskUrl);
             
             if (selectedPatient) await fetchFiles(selectedPatient.id);
+            
+            // YENİ: Analiz bitince alt menüyü API SERVICE ile güncelle
+            setIsLoadingMasks(prev => ({ ...prev, [activeFileId]: true }));
+            try {
+                const data = await getMasksByFile(activeFileId);
+                setFileMasks(prev => ({ ...prev, [activeFileId]: data }));
+                setExpandedFileId(activeFileId);
+            } catch(e) { console.error(e); }
+            setIsLoadingMasks(prev => ({ ...prev, [activeFileId]: false }));
+
             setRoiCoords(null); 
         } catch (error) {
             console.error("Segmentasyon hatası:", error);
-            alert("Analiz sırasında bir hata oluştu. Lütfen bağlantınızı kontrol edin.");
+            alert("Analiz sırasında bir hata oluştu.");
         } finally {
             setIsSegmenting(false);
         }
     };
 
-    // ==========================================
-    // YENİ: YÜZDELİ DOSYA İNDİRME (STREAM)
-    // ==========================================
     const handleDownload = async (url, defaultFilename) => {
         if (!url) return;
         setIsDownloading(true);
@@ -138,7 +236,7 @@ const MainDashboard = ({ user, onLogout }) => {
 
         try {
             const response = await fetch(url);
-            if (!response.ok) throw new Error('Ağ hatası veya dosya bulunamadı');
+            if (!response.ok) throw new Error('Ağ hatası');
 
             const contentLength = response.headers.get('content-length');
             const total = contentLength ? parseInt(contentLength, 10) : 0;
@@ -166,7 +264,6 @@ const MainDashboard = ({ user, onLogout }) => {
                 }
             }
 
-            // Dosyayı birleştir ve kaydet
             const blob = new Blob(chunks);
             const blobUrl = window.URL.createObjectURL(blob);
             
@@ -180,9 +277,8 @@ const MainDashboard = ({ user, onLogout }) => {
 
         } catch (error) {
             console.error("İndirme hatası:", error);
-            alert("İndirme sırasında bir hata oluştu. Sunucu bağlantınızı kontrol edin.");
+            alert("İndirme başarısız.");
         } finally {
-            // İşlem bittikten 1 saniye sonra pencereyi kapat
             setTimeout(() => {
                 setIsDownloading(false);
                 setDownloadProgress(0);
@@ -194,9 +290,13 @@ const MainDashboard = ({ user, onLogout }) => {
     const currentActiveFile = patientFiles.find(f => f.id === activeFileId);
     const isActiveFileSegmented = currentActiveFile?.status === 'segmented';
 
+    const totalFiles = patientFiles.length;
+    const segmentedFiles = patientFiles.filter(f => f.status === 'segmented').length;
+    const pendingFiles = totalFiles - segmentedFiles;
+    const aiProgressPercent = totalFiles > 0 ? Math.round((segmentedFiles / totalFiles) * 100) : 0;
+
     return (
         <div className="dashboard-layout">
-            {/* İNDİRME OVERLAY (Ekranda Ortada Çıkan Kutucuk) */}
             {isDownloading && (
                 <div style={{
                     position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -210,20 +310,10 @@ const MainDashboard = ({ user, onLogout }) => {
                     }}>
                         <Download size={48} color="#60a5fa" style={{ marginBottom: '15px' }} />
                         <h3 style={{ color: 'white', marginBottom: '15px' }}>Dosya İndiriliyor</h3>
-                        
-                        {/* Progress Bar Arka Planı */}
                         <div style={{ width: '100%', height: '10px', background: '#334155', borderRadius: '5px', overflow: 'hidden' }}>
-                            {/* İlerleyen Kısım */}
-                            <div style={{
-                                width: `${downloadProgress}%`, height: '100%',
-                                background: 'linear-gradient(90deg, #3b82f6, #10b981)',
-                                transition: 'width 0.2s ease-out'
-                            }}></div>
+                            <div style={{ width: `${downloadProgress}%`, height: '100%', background: 'linear-gradient(90deg, #3b82f6, #10b981)', transition: 'width 0.2s ease-out' }}></div>
                         </div>
-                        
-                        <p style={{ color: '#94a3b8', marginTop: '15px', fontSize: '0.9rem', fontWeight: 'bold' }}>
-                            {downloadDetails}
-                        </p>
+                        <p style={{ color: '#94a3b8', marginTop: '15px', fontSize: '0.9rem', fontWeight: 'bold' }}>{downloadDetails}</p>
                     </div>
                 </div>
             )}
@@ -273,9 +363,7 @@ const MainDashboard = ({ user, onLogout }) => {
                                 <div className="viewer-card">
                                     <div className="card-top">
                                         <div>
-                                            <h3 style={{ color: 'white', marginBottom: '5px' }}>
-                                                {selectedPatient.name} - MR Görüntüleri
-                                            </h3>
+                                            <h3 style={{ color: 'white', marginBottom: '5px' }}>{selectedPatient.name} - MR Görüntüleri</h3>
                                             <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>ID: {selectedPatient.id}</span>
                                         </div>
                                         <label className="upload-label" style={{ opacity: uploading ? 0.7 : 1 }}>
@@ -285,36 +373,109 @@ const MainDashboard = ({ user, onLogout }) => {
                                         </label>
                                     </div>
 
+                                    
+
+                                    {/* DOSYA LİSTESİ VE AKORDEON MENÜ */}
                                     {patientFiles.length > 0 && (
-                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', padding: '15px', background: '#0f172a', borderBottom: '1px solid #1e293b' }}>
-                                            {patientFiles.map(f => {
-                                                const isSegmented = f.status === 'segmented';
-                                                const isActive = activeFileId === f.id;
-                                                
-                                                return (
-                                                    <button 
-                                                        key={f.id} 
-                                                        onClick={() => handleFileClick(f)}
-                                                        style={{
-                                                            display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 15px',
-                                                            background: isActive ? '#1e293b' : '#334155',
-                                                            border: `1px solid ${isActive ? (isSegmented ? '#10b981' : '#3b82f6') : 'transparent'}`,
-                                                            borderRadius: '8px', cursor: 'pointer', transition: '0.2s',
-                                                            minWidth: '220px', textAlign: 'left'
-                                                        }}
-                                                    >
-                                                        {isSegmented ? <CheckCircle size={22} color="#10b981" /> : <File size={22} color="#94a3b8" />}
-                                                        <div>
-                                                            <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: 'white' }}>
-                                                                {f.filename.length > 20 ? f.filename.substring(0, 20) + '...' : f.filename}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '15px', background: '#0f172a', borderBottom: '1px solid #1e293b' }}>
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'flex-start' }}>
+                                                {patientFiles.map(f => {
+                                                    const isSegmented = f.status === 'segmented';
+                                                    const isActive = activeFileId === f.id;
+                                                    const isExpanded = expandedFileId === f.id;
+                                                    
+                                                    return (
+                                                        <div key={f.id} style={{ display: 'flex', flexDirection: 'column', width: '280px', background: '#334155', borderRadius: '8px', border: `1px solid ${isActive ? (isSegmented ? '#10b981' : '#3b82f6') : 'transparent'}`, transition: 'all 0.3s ease' }}>
+                                                            
+                                                            {/* ANA KART */}
+                                                            <div style={{ display: 'flex', alignItems: 'stretch' }}>
+                                                                <button 
+                                                                    onClick={() => handleFileClick(f)}
+                                                                    style={{
+                                                                        flex: 1, display: 'flex', alignItems: 'center', gap: '10px', padding: '10px', 
+                                                                        background: isActive ? '#1e293b' : 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', borderRadius: '8px 0 0 8px'
+                                                                    }}
+                                                                >
+                                                                    {isSegmented ? <CheckCircle size={20} color="#10b981" /> : <File size={20} color="#94a3b8" />}
+                                                                    <div style={{ overflow: 'hidden' }}>
+                                                                        <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'white', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                                                                            {f.filename}
+                                                                        </div>
+                                                                        <div style={{ fontSize: '0.7rem', color: isSegmented ? '#10b981' : '#94a3b8', marginTop: '2px' }}>
+                                                                            {isSegmented ? 'Yapay Zeka Analizli' : 'İşlem Bekliyor'}
+                                                                        </div>
+                                                                    </div>
+                                                                </button>
+                                                                
+                                                                {/* SİLME BUTONU (ÇÖP KUTUSU) */}
+                                                                <button 
+                                                                    onClick={(e) => handleDeleteFile(e, f.id, f.filename)}
+                                                                    style={{ width: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.1)', border: 'none', cursor: 'pointer', color: '#ef4444' }}
+                                                                    title="Dosyayı Sil"
+                                                                >
+                                                                    <Trash2 size={16} />
+                                                                </button>
+
+                                                                {/* OK BUTONU (Sadece Segmentli ise çıkar) */}
+                                                                {isSegmented && (
+                                                                    <button 
+                                                                        onClick={(e) => toggleFileExpand(e, f.id)}
+                                                                        style={{ width: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.2)', border: 'none', borderRadius: '0 8px 8px 0', cursor: 'pointer', color: '#94a3b8' }}
+                                                                    >
+                                                                        {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                                                                    </button>
+                                                                )}
                                                             </div>
-                                                            <div style={{ fontSize: '0.75rem', color: isSegmented ? '#10b981' : '#94a3b8', marginTop: '4px' }}>
-                                                                {isSegmented ? 'Yapay Zeka Analizli' : 'Ham Görüntü (İşlem Bekliyor)'}
-                                                            </div>
+
+                                                            {/* AÇILAN ALT MENÜ (MASKELER) */}
+                                                            {isExpanded && (
+                                                                <div style={{ padding: '8px', background: '#1e293b', borderRadius: '0 0 8px 8px', borderTop: '1px solid #334155' }}>
+                                                                    {isLoadingMasks[f.id] ? (
+                                                                        <div style={{ display: 'flex', justifyContent: 'center', padding: '10px' }}>
+                                                                            <Loader2 size={18} className="animate-spin" color="#94a3b8" />
+                                                                        </div>
+                                                                    ) : fileMasks[f.id]?.length > 0 ? (
+                                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                                            {fileMasks[f.id].map((mask, idx) => {
+                                                                                const isMaskActive = activeMaskId === mask.id;
+                                                                                return (
+                                                                                    <div key={mask.id} style={{ display: 'flex', alignItems: 'center', background: isMaskActive ? '#3b82f6' : '#334155', borderRadius: '6px' }}>
+                                                                                        <button
+                                                                                            onClick={() => handleSpecificMaskClick(f, mask)}
+                                                                                            style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', fontSize: '0.75rem', textAlign: 'left' }}
+                                                                                        >
+                                                                                            <CornerDownRight size={14} color={isMaskActive ? 'white' : '#94a3b8'} />
+                                                                                            <div style={{ flex: 1 }}>
+                                                                                                <strong>Analiz {fileMasks[f.id].length - idx}</strong>
+                                                                                                <div style={{ fontSize: '0.65rem', color: isMaskActive ? '#e2e8f0' : '#94a3b8' }}>
+                                                                                                    {new Date(mask.created_at).toLocaleDateString('tr-TR')}
+                                                                                                </div>
+                                                                                            </div>
+                                                                                        </button>
+                                                                                        
+                                                                                        {/* MASKEYE ÖZEL SİLME BUTONU */}
+                                                                                        <button 
+                                                                                            onClick={(e) => handleDeleteMask(e, mask.id, f.id)}
+                                                                                            style={{ padding: '8px', background: 'transparent', border: 'none', cursor: 'pointer', color: '#f87171' }}
+                                                                                            title="Bu Analizi Sil"
+                                                                                        >
+                                                                                            <Trash2 size={14} />
+                                                                                        </button>
+                                                                                    </div>
+                                                                                )
+                                                                            })}
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div style={{ fontSize: '0.75rem', color: '#94a3b8', textAlign: 'center', padding: '5px' }}>
+                                                                            Kayıtlı maske bulunamadı.
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            )}
                                                         </div>
-                                                    </button>
-                                                )
-                                            })}
+                                                    )
+                                                })}
+                                            </div>
                                         </div>
                                     )}
 
@@ -357,22 +518,12 @@ const MainDashboard = ({ user, onLogout }) => {
                                             </div>
 
                                             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                                                <button 
-                                                    onClick={() => handleDownload(mainImage.url, mainImage.name)}
-                                                    className="view-btn"
-                                                    title="Orijinal Görüntüyü İndir"
-                                                    style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#334155', padding: '8px 12px', border: 'none', borderRadius: '6px', cursor: 'pointer', color: 'white' }}
-                                                >
+                                                <button onClick={() => handleDownload(mainImage.url, mainImage.name)} className="view-btn" title="Orijinal Görüntüyü İndir" style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#334155', padding: '8px 12px', border: 'none', borderRadius: '6px', cursor: 'pointer', color: 'white' }}>
                                                     <Download size={16} /> <span style={{fontSize: '0.8rem', fontWeight: 'bold'}}>Orijinal</span>
                                                 </button>
 
                                                 {maskImage && (
-                                                    <button 
-                                                        onClick={() => handleDownload(maskImage, `maske_${mainImage.name}`)}
-                                                        className="view-btn"
-                                                        title="Üretilen Maskeyi İndir"
-                                                        style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#334155', padding: '8px 12px', border: 'none', borderRadius: '6px', cursor: 'pointer', color: '#10b981' }}
-                                                    >
+                                                    <button onClick={() => handleDownload(maskImage, `maske_${mainImage.name}`)} className="view-btn" title="Üretilen Maskeyi İndir" style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#334155', padding: '8px 12px', border: 'none', borderRadius: '6px', cursor: 'pointer', color: '#10b981' }}>
                                                         <Download size={16} /> <span style={{fontSize: '0.8rem', fontWeight: 'bold'}}>Maske</span>
                                                     </button>
                                                 )}
@@ -381,14 +532,10 @@ const MainDashboard = ({ user, onLogout }) => {
 
                                                 {roiCoords && <span style={{ color: '#10b981', fontSize: '0.7rem', fontWeight: 'bold' }}>✔ BÖLGE SEÇİLDİ</span>}
                                                 <button 
-                                                    onClick={handleSegmentClick} 
-                                                    disabled={isSegmenting}
-                                                    className="segment-btn"
+                                                    onClick={handleSegmentClick} disabled={isSegmenting} className="segment-btn"
                                                     style={{
                                                         background: isSegmenting ? '#475569' : (isActiveFileSegmented ? 'linear-gradient(90deg, #3b82f6, #2563eb)' : 'linear-gradient(90deg, #10b981, #059669)'),
-                                                        color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px',
-                                                        display: 'flex', alignItems: 'center', gap: '8px', cursor: isSegmenting ? 'not-allowed' : 'pointer',
-                                                        fontWeight: 'bold', boxShadow: '0 4px 6px rgba(0,0,0,0.2)', transition: '0.3s'
+                                                        color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px', cursor: isSegmenting ? 'not-allowed' : 'pointer', fontWeight: 'bold', boxShadow: '0 4px 6px rgba(0,0,0,0.2)', transition: '0.3s'
                                                     }}
                                                 >
                                                     {isSegmenting ? <Loader2 size={18} className="animate-spin" /> : <BrainCircuit size={18} />}

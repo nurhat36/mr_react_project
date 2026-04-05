@@ -1,7 +1,6 @@
 import axios from 'axios';
 
 // CANLI VE LOCAL AYRIMI (Otomatik)
-// NOT: Canlı sunucu adresi https olarak güncellendi!
 const API_URL = window.location.hostname === 'localhost' 
     ? 'http://localhost:8000/api' 
     : 'http://oncovisionai.com.tr/api';
@@ -10,7 +9,6 @@ const API_URL = window.location.hostname === 'localhost'
 const getAuthHeaders = (isMultipart = false) => {
     const userStr = localStorage.getItem('user');
     
-    // Eğer kullanıcı giriş yapmamışsa uyar (Hata ayıklamayı kolaylaştırır)
     if (!userStr) {
         console.warn("Yetki Uyarısı: Token bulunamadı. Lütfen giriş yapın.");
         return {};
@@ -26,39 +24,52 @@ const getAuthHeaders = (isMultipart = false) => {
     return { headers };
 };
 
-// Hastaya ait dosyaları getir
+// 1. Hastaya ait dosyaları getir
 export const getPatientFiles = async (patientId) => {
     const response = await axios.get(`${API_URL}/files/${patientId}`, getAuthHeaders());
     return response.data;
 };
 
-// Hastaya yeni dosya yükle
+// 2. Hastaya yeni dosya yükle
 export const uploadPatientFile = async (patientId, file) => {
     const formData = new FormData();
     formData.append('file', file);
-
     const response = await axios.post(`${API_URL}/files/${patientId}`, formData, getAuthHeaders(true));
     return response.data;
 };
 
-// ==========================================
-// SEGMENTASYON BAŞLATMA (Güncellendi)
-// ==========================================
+// 3. Segmentasyon Başlatma
 export const startSegmentation = async (fileId, roi = null) => {
     const formData = new FormData();
-    
-    // Dashboard'dan gelen ROI (Seçim Kutusu) koordinatları varsa onları kullan, yoksa 0 gönder
     formData.append('x', roi?.x || 0);
     formData.append('y', roi?.y || 0);
-    formData.append('z', roi?.z || 0); // 3D için Z eksenini de ekledik
-    
-    // Modelin kırpacağı (crop) alanın varsayılan genişliği
+    formData.append('z', roi?.z || 0); 
     formData.append('width', 64); 
     formData.append('height', 64);
     formData.append('shape', 'rectangle');
 
-    // getAuthHeaders(true) kullanarak multipart (form-data) ayarını ve Token'ı otomatik çekiyoruz
     const response = await axios.post(`${API_URL}/segment/${fileId}`, formData, getAuthHeaders(true));
-    
+    return response.data;
+};
+
+// ==========================================
+// YENİ EKLENEN FONKSİYONLAR (Flutter ile Senkronize)
+// ==========================================
+
+// 4. Bir dosyaya ait tüm maskeleri çeker
+export const getMasksByFile = async (fileId) => {
+    const response = await axios.get(`${API_URL}/masks/file/${fileId}`, getAuthHeaders());
+    return response.data;
+};
+
+// 5. Dosyayı kalıcı olarak siler (Maskeleriyle birlikte)
+export const deleteFile = async (fileId) => {
+    const response = await axios.delete(`${API_URL}/files/${fileId}`, getAuthHeaders());
+    return response.data;
+};
+
+// 6. Sadece spesifik bir maskeyi siler
+export const deleteMask = async (maskId) => {
+    const response = await axios.delete(`${API_URL}/segment/${maskId}`, getAuthHeaders());
     return response.data;
 };
