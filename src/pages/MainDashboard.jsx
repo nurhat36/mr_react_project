@@ -14,7 +14,7 @@ import {
     Move, 
     Square,
     CheckCircle,
-    Download // YENİ: İndirme ikonu eklendi
+    Download
 } from 'lucide-react';
 
 const BASE_URL = window.location.hostname === 'localhost' 
@@ -35,6 +35,11 @@ const MainDashboard = ({ user, onLogout }) => {
     
     const [interactionMode, setInteractionMode] = useState('pan');
     const [roiCoords, setRoiCoords] = useState(null);
+
+    // --- YENİ: İNDİRME İLERLEME DURUMLARI ---
+    const [isDownloading, setIsDownloading] = useState(false);
+    const [downloadProgress, setDownloadProgress] = useState(0);
+    const [downloadDetails, setDownloadDetails] = useState('');
 
     useEffect(() => {
         window.onROISelected = (coords) => {
@@ -68,14 +73,10 @@ const MainDashboard = ({ user, onLogout }) => {
         try {
             setUploading(true);
             const result = await uploadPatientFile(selectedPatient.id, file);
-            
             await fetchFiles(selectedPatient.id); 
             
             setActiveFileId(result.id);
-            setMainImage({ 
-                url: URL.createObjectURL(file), 
-                name: file.name 
-            }); 
+            setMainImage({ url: URL.createObjectURL(file), name: file.name }); 
             setMaskImage(null); 
             setRoiCoords(null);
         } catch (error) {
@@ -116,10 +117,7 @@ const MainDashboard = ({ user, onLogout }) => {
             const fullMaskUrl = newMaskPath.startsWith('/') ? `${BASE_URL}${newMaskPath}` : `${BASE_URL}/${newMaskPath}`;
             setMaskImage(fullMaskUrl);
             
-            if (selectedPatient) {
-                await fetchFiles(selectedPatient.id);
-            }
-            
+            if (selectedPatient) await fetchFiles(selectedPatient.id);
             setRoiCoords(null); 
         } catch (error) {
             console.error("Segmentasyon hatası:", error);
@@ -130,14 +128,46 @@ const MainDashboard = ({ user, onLogout }) => {
     };
 
     // ==========================================
-    // YENİ: DOSYA İNDİRME FONKSİYONU
+    // YENİ: YÜZDELİ DOSYA İNDİRME (STREAM)
     // ==========================================
     const handleDownload = async (url, defaultFilename) => {
         if (!url) return;
+        setIsDownloading(true);
+        setDownloadProgress(0);
+        setDownloadDetails('Sunucuya bağlanıyor...');
+
         try {
-            // Tarayıcının yeni sekmede açmasını engellemek için dosyayı Blob olarak çekiyoruz
             const response = await fetch(url);
-            const blob = await response.blob();
+            if (!response.ok) throw new Error('Ağ hatası veya dosya bulunamadı');
+
+            const contentLength = response.headers.get('content-length');
+            const total = contentLength ? parseInt(contentLength, 10) : 0;
+            let loaded = 0;
+
+            const reader = response.body.getReader();
+            const chunks = [];
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                chunks.push(value);
+                loaded += value.length;
+
+                if (total > 0) {
+                    const percent = (loaded / total) * 100;
+                    setDownloadProgress(percent);
+                    const mbLoaded = (loaded / (1024 * 1024)).toFixed(2);
+                    const mbTotal = (total / (1024 * 1024)).toFixed(2);
+                    setDownloadDetails(`${mbLoaded} MB / ${mbTotal} MB (%${Math.round(percent)})`);
+                } else {
+                    const mbLoaded = (loaded / (1024 * 1024)).toFixed(2);
+                    setDownloadDetails(`${mbLoaded} MB İndirildi...`);
+                }
+            }
+
+            // Dosyayı birleştir ve kaydet
+            const blob = new Blob(chunks);
             const blobUrl = window.URL.createObjectURL(blob);
             
             const a = document.createElement('a');
@@ -147,10 +177,17 @@ const MainDashboard = ({ user, onLogout }) => {
             a.click();
             document.body.removeChild(a);
             window.URL.revokeObjectURL(blobUrl);
+
         } catch (error) {
             console.error("İndirme hatası:", error);
-            // Eğer CORS vb. engellerse B planı olarak normal linkle aç (tarayıcı indirir)
-            window.open(url, '_blank');
+            alert("İndirme sırasında bir hata oluştu. Sunucu bağlantınızı kontrol edin.");
+        } finally {
+            // İşlem bittikten 1 saniye sonra pencereyi kapat
+            setTimeout(() => {
+                setIsDownloading(false);
+                setDownloadProgress(0);
+                setDownloadDetails('');
+            }, 1000);
         }
     };
 
@@ -159,6 +196,38 @@ const MainDashboard = ({ user, onLogout }) => {
 
     return (
         <div className="dashboard-layout">
+            {/* İNDİRME OVERLAY (Ekranda Ortada Çıkan Kutucuk) */}
+            {isDownloading && (
+                <div style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 9999,
+                    display: 'flex', justifyContent: 'center', alignItems: 'center'
+                }}>
+                    <div style={{
+                        background: '#1e293b', padding: '30px', borderRadius: '12px',
+                        width: '400px', textAlign: 'center', border: '1px solid #334155',
+                        boxShadow: '0 10px 25px rgba(0,0,0,0.5)'
+                    }}>
+                        <Download size={48} color="#60a5fa" style={{ marginBottom: '15px' }} />
+                        <h3 style={{ color: 'white', marginBottom: '15px' }}>Dosya İndiriliyor</h3>
+                        
+                        {/* Progress Bar Arka Planı */}
+                        <div style={{ width: '100%', height: '10px', background: '#334155', borderRadius: '5px', overflow: 'hidden' }}>
+                            {/* İlerleyen Kısım */}
+                            <div style={{
+                                width: `${downloadProgress}%`, height: '100%',
+                                background: 'linear-gradient(90deg, #3b82f6, #10b981)',
+                                transition: 'width 0.2s ease-out'
+                            }}></div>
+                        </div>
+                        
+                        <p style={{ color: '#94a3b8', marginTop: '15px', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                            {downloadDetails}
+                        </p>
+                    </div>
+                </div>
+            )}
+
             <aside className="sidebar">
                 <div className="sidebar-header">
                     <Activity color="#60a5fa" size={32} />
@@ -234,11 +303,7 @@ const MainDashboard = ({ user, onLogout }) => {
                                                             minWidth: '220px', textAlign: 'left'
                                                         }}
                                                     >
-                                                        {isSegmented ? (
-                                                            <CheckCircle size={22} color="#10b981" />
-                                                        ) : (
-                                                            <File size={22} color="#94a3b8" />
-                                                        )}
+                                                        {isSegmented ? <CheckCircle size={22} color="#10b981" /> : <File size={22} color="#94a3b8" />}
                                                         <div>
                                                             <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: 'white' }}>
                                                                 {f.filename.length > 20 ? f.filename.substring(0, 20) + '...' : f.filename}
@@ -274,20 +339,8 @@ const MainDashboard = ({ user, onLogout }) => {
                                             
                                             <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
                                                 <div className="btn-group" style={{ borderRight: '1px solid #334155', paddingRight: '15px' }}>
-                                                    <button 
-                                                        className={`view-btn ${interactionMode === 'pan' ? 'active' : ''}`} 
-                                                        onClick={() => setInteractionMode('pan')}
-                                                        title="Yakınlaştır ve Gezin"
-                                                    >
-                                                        <Move size={14} /> El
-                                                    </button>
-                                                    <button 
-                                                        className={`view-btn ${interactionMode === 'select' ? 'active' : ''}`} 
-                                                        onClick={() => setInteractionMode('select')}
-                                                        title="Sağ Tıkla Bölge Seç"
-                                                    >
-                                                        <Square size={14} /> Seçim
-                                                    </button>
+                                                    <button className={`view-btn ${interactionMode === 'pan' ? 'active' : ''}`} onClick={() => setInteractionMode('pan')} title="Yakınlaştır ve Gezin"><Move size={14} /> El</button>
+                                                    <button className={`view-btn ${interactionMode === 'select' ? 'active' : ''}`} onClick={() => setInteractionMode('select')} title="Sağ Tıkla Bölge Seç"><Square size={14} /> Seçim</button>
                                                 </div>
 
                                                 <span className="control-label" style={{ color: '#94a3b8', fontSize: '0.75rem' }}>MOD:</span>
@@ -304,7 +357,6 @@ const MainDashboard = ({ user, onLogout }) => {
                                             </div>
 
                                             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                                                {/* YENİ: İNDİRME BUTONLARI */}
                                                 <button 
                                                     onClick={() => handleDownload(mainImage.url, mainImage.name)}
                                                     className="view-btn"
